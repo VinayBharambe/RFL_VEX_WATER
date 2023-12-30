@@ -1,0 +1,178 @@
+
+#include<evive.h>
+
+//Included Libraries
+#include <ESP8266.h>
+
+//MACROS are defined here
+#define SSID        "vinay"
+#define PASSWORD    "00000000"
+ESP8266 wifi(Serial3, 115200);
+#define X_AIO_KEY   "aio_NRqK28jjGQLfURKek8oZ9kV3UIB1"
+#define USERNAME    "RFL_VEX_WATER"
+
+#define HOST_NAME   "io.adafruit.com"
+#define HOST_PORT   (80)
+
+byte statusLed    = 13;
+
+byte sensorInterrupt1 = 0;  // 0 = digital pin 2
+byte sensorInterrupt2 = 1; 
+byte sensorPin1       = 2;
+byte sensorPin2       = 3;
+
+// The hall-effect flow sensor outputs approximately 4.5 pulses per second per
+// litre/minute of flow.
+float calibrationFactor = 4.5;
+
+volatile byte pulseCount1,pulseCount2;  
+
+float flowRate1;
+float flowRate2;
+float flowRate3;
+float totalUsage1;
+float totalUsage2;
+float totalUsage3;
+
+
+unsigned long oldTime,sendTime;
+
+void setup()
+{
+  
+  // Initialize a serial connection for reporting values to the host
+  Serial.begin(9600);
+  tft_init(INITR_GREENTAB);
+  tft.setRotation(1);
+  tft.fillScreen(ST7735_BLACK);
+  tft.setTextColor(ST7735_RED);
+  tft.setTextSize(1);
+  tft.setCursor(20,15);
+  wifi.setOprToStation();
+  wifi.connectWiFi(SSID, PASSWORD);
+  
+  // Set up the status LED line as an output
+  pinMode(statusLed, OUTPUT);
+  digitalWrite(statusLed, HIGH);  // We have an active-low LED attached
+  
+  pinMode(sensorPin1, INPUT);
+  digitalWrite(sensorPin1, HIGH);
+
+  // Set up the status LED line as an output
+  pinMode(statusLed, OUTPUT);
+  digitalWrite(statusLed, HIGH);  // We have an active-low LED attached
+  
+  pinMode(sensorPin2, INPUT);
+  digitalWrite(sensorPin2, HIGH);
+
+  pulseCount1        = 0;
+  pulseCount2        = 0;
+  flowRate1          = 0.0;
+  totalUsage1  = 0;
+  flowRate2          = 0.0;
+  totalUsage2  = 0;
+  flowRate3          = 0.0;
+  totalUsage3  = 0;
+  oldTime           = 0;
+  sendTime	    = 0;
+
+  // The Hall-effect sensor is connected to pin 2 which uses interrupt 0.
+  // Configured to trigger on a FALLING state change (transition from HIGH
+  // state to LOW state)
+  attachInterrupt(sensorInterrupt1, pulseCounter1, FALLING);
+  
+  attachInterrupt(sensorInterrupt2, pulseCounter2, FALLING);
+}
+
+
+void loop()
+{
+
+   if((millis() - oldTime) > 1000)    // Only process counters once per second
+  { 
+    detachInterrupt(sensorInterrupt1);
+    detachInterrupt(sensorInterrupt2);
+
+
+    flowRate1 = ((1000.0 / (millis() - oldTime)) * pulseCount1) / calibrationFactor;
+
+    flowRate2 = ((1000.0 / (millis() - oldTime)) * pulseCount2) / calibrationFactor;    
+
+    oldTime = millis();
+
+    totalUsage1 += flowRate1/60;
+    totalUsage2 += flowRate2/60;
+    
+    // Print the flow rate for this second in litres / minute
+    tft.setTextColor(ST7735_WHITE);
+    tft.setTextSize(1);
+    tft.setCursor(5,0);
+    tft.print("Flow rate");
+    tft.setTextColor(ST7735_RED,ST7735_BLACK);
+    tft.setCursor(10,15);
+    tft.print("Line 1: ");
+    tft.setCursor(10,30);
+    tft.print("Line 2: ");
+    tft.setCursor(10,45);
+    tft.print("Line 3: ");
+    tft.setTextColor(ST7735_GREEN,ST7735_BLACK);
+    tft.setCursor(65,15);
+    tft.print(float(flowRate1));
+    tft.print("L/min");
+    tft.setCursor(65,30);
+    tft.print(float(flowRate2));
+    tft.print("L/min");
+    tft.setCursor(65,45);
+    tft.print(float(flowRate3));
+    tft.print("L/min");
+    // Print the number of litres flowed in this second
+
+
+    // Print the cumulative total of litres flowed since starting
+    Serial.print("  Output Liquid Quantity: ");             // Output separator
+    Serial.print(totalUsage1);
+    Serial.println("L"); 
+    tft.setTextColor(ST7735_WHITE);
+    tft.setTextSize(1);
+    tft.setCursor(15,95);
+    tft.println("Output Liquid Quantity:");
+    tft.setTextColor(ST7735_GREEN,ST7735_BLACK);
+    tft.setTextSize(1);
+    tft.setCursor(15,110);
+    tft.print(totalUsage1);
+    tft.print("  L  ");
+    
+    // Reset the pulse counter so we can start incrementing again
+    pulseCount1 = 0;
+    pulseCount2 = 0;
+    // Enable the interrupt again now that we've finished sending output
+    attachInterrupt(sensorInterrupt1, pulseCounter1, FALLING);
+    attachInterrupt(sensorInterrupt2, pulseCounter2, FALLING);
+  }
+
+/*	if((millis() - sendTime) > 6000)
+	{
+	detachInterrupt(sensorInterrupt);
+
+	wifi.sendAdafruitIO_NUMBER(flowRate1, X_AIO_KEY, USERNAME, "bmc-water.line1flow", 200, HOST_NAME, HOST_PORT);
+
+	wifi.sendAdafruitIO_NUMBER(totalUsage1, X_AIO_KEY, USERNAME, "bmc-water.line1usage", 200, HOST_NAME, HOST_PORT);
+
+	sendTime = millis();
+
+	attachInterrupt(sensorInterrupt, pulseCounter, FALLING);
+
+	}*/
+}
+
+void pulseCounter1()
+{
+  // Increment the pulse counter
+  pulseCount1++;
+}
+
+void pulseCounter2()
+{
+  // Increment the pulse counter
+  pulseCount2++;
+}
